@@ -1,0 +1,254 @@
+// Hiweb — Prisma schema
+//
+// Implements the entities and relationships approved in
+// /docs/architecture/database-design.md (Sections 1 & 2) exactly as
+// documented there, including the later approved additions:
+// ServiceRequestStatusHistory, AuditLog, SettingEntry, Quotation.isCurrent,
+// and slug/publishStatus on ServiceCategory/PortfolioProject.
+//
+// NOT YET RUN: `prisma generate` / `prisma migrate` have not been
+// executed anywhere — this environment has no network access, so no
+// database connection, no generated client, and no migration history
+// exist yet. This file is the schema definition only.
+//
+// Database technology (PostgreSQL) was a proposal in repo-structure.md
+// and database-design.md — writing this file is the point at which
+// that proposal became a concrete implementation choice. If a
+// different database is wanted, this is the file to change before
+// any migration is ever run.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+/// Section 2 (Users & Roles) has not decided the full lifecycle rules
+/// for these states — the enum exists so the field has a fixed shape,
+/// per database-design.md's own flag on this point.
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING
+  DELETED
+}
+
+/// Fixed 8-value list per the Section 1 architecture note and
+/// database-design.md 1.3 — matches packages/ui's StatusBadge exactly.
+/// Do not add/remove values here without updating StatusBadge and
+/// request-workflow.md's transition table.
+enum RequestStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  QUOTATION_SENT
+  APPROVED
+  REJECTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+/// Shared by ServiceCategory and PortfolioProject — the approved
+/// slug + publish status decision (project-status.md, "Approved
+/// architecture decisions").
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+// ---------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------
+
+/// database-design.md 1.1
+model User {
+  id            String        @id @default(cuid())
+  piUid         String        @unique @map("pi_uid")
+  displayName   String        @map("display_name")
+  email         String?
+  role          UserRole      @default(USER)
+  accountStatus AccountStatus @default(ACTIVE) @map("account_status")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  // Reverse relations — this User acting as an admin who manages/prepares/
+  // triggers/updates records elsewhere in the schema.
+  managedServiceCategories  ServiceCategory[]           @relation("ServiceCategoryManagedBy")
+  managedPortfolioProjects  PortfolioProject[]          @relation("PortfolioProjectManagedBy")
+  serviceRequests           ServiceRequest[]            @relation("ServiceRequestSubmittedBy")
+  preparedQuotations        Quotation[]                 @relation("QuotationPreparedBy")
+  refreshTokens             RefreshToken[]              @relation("RefreshTokenOwner")
+  statusHistoryChanges      ServiceRequestStatusHistory[] @relation("StatusHistoryChangedBy")
+  auditLogEntries           AuditLog[]                  @relation("AuditLogActor")
+  settingUpdates            SettingEntry[]              @relation("SettingUpdatedBy")
+
+  @@map("users")
+}
+
+/// database-design.md 1.2 — slug + publishStatus per the approved
+/// architecture decision (replaces the earlier `isActive` boolean).
+model ServiceCategory {
+  id              String        @id @default(cuid())
+  title           String
+  slug            String        @unique
+  description     String        @db.Text
+  publishStatus   PublishStatus @default(DRAFT) @map("publish_status")
+  sortOrder       Int           @default(0) @map("sort_order")
+  managedByUserId String        @map("managed_by_user_id")
+  managedBy       User          @relation("ServiceCategoryManagedBy", fields: [managedByUserId], references: [id])
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  serviceRequests ServiceRequest[]
+
+  @@index([publishStatus])
+  @@map("service_categories")
+}
+
+/// database-design.md 1.3 — status transition RULES are intentionally
+/// not enforced at the schema level (see request-workflow.md); this
+/// model only stores the current value and its fixed enum of options.
+model ServiceRequest {
+  id                String          @id @default(cuid())
+  userId            String          @map("user_id")
+  user              User            @relation("ServiceRequestSubmittedBy", fields: [userId], references: [id])
+  serviceCategoryId String?         @map("service_category_id")
+  serviceCategory   ServiceCategory? @relation(fields: [serviceCategoryId], references: [id])
+  projectDetails    String          @db.Text @map("project_details")
+  status            RequestStatus   @default(SUBMITTED)
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  quotations    Quotation[]
+  statusHistory ServiceRequestStatusHistory[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("service_requests")
+}
+
+/// database-design.md 1.4 — one-to-many with ServiceRequest so
+/// revisions are possible; `isCurrent` resolves the gap flagged in
+/// request-workflow.md (exactly one current quotation per request —
+/// enforced at the application layer, not by this schema alone).
+model Quotation {
+  id                String         @id @default(cuid())
+  serviceRequestId  String         @map("service_request_id")
+  serviceRequest    ServiceRequest @relation(fields: [serviceRequestId], references: [id])
+  preparedByUserId  String         @map("prepared_by_user_id")
+  preparedBy        User           @relation("QuotationPreparedBy", fields: [preparedByUserId], references: [id])
+  amount            Decimal        @db.Decimal(12, 2)
+  currency          String
+  scopeDescription  String         @db.Text @map("scope_description")
+  validUntil        DateTime?      @map("valid_until")
+  isCurrent         Boolean        @default(true) @map("is_current")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  @@index([serviceRequestId])
+  @@map("quotations")
+}
+
+/// database-design.md 1.5 — slug + publishStatus per the approved
+/// architecture decision (replaces the earlier `isPublished` boolean).
+model PortfolioProject {
+  id              String        @id @default(cuid())
+  title           String
+  slug            String        @unique
+  summary         String        @db.Text
+  categoryTag     String        @map("category_tag")
+  imageUrl        String?       @map("image_url")
+  publishStatus   PublishStatus @default(DRAFT) @map("publish_status")
+  sortOrder       Int           @default(0) @map("sort_order")
+  managedByUserId String        @map("managed_by_user_id")
+  managedBy       User          @relation("PortfolioProjectManagedBy", fields: [managedByUserId], references: [id])
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  @@index([publishStatus])
+  @@map("portfolio_projects")
+}
+
+/// database-design.md 1.6 — approved decision. The user/admin-facing
+/// timeline for a single ServiceRequest, distinct in PURPOSE from the
+/// broader AuditLog below (see database-design.md 1.6 for the
+/// reasoning), even though the same event may be recorded in both.
+model ServiceRequestStatusHistory {
+  id               String          @id @default(cuid())
+  serviceRequestId String          @map("service_request_id")
+  serviceRequest   ServiceRequest  @relation(fields: [serviceRequestId], references: [id])
+  fromStatus       RequestStatus?  @map("from_status")
+  toStatus         RequestStatus   @map("to_status")
+  changedByUserId  String?         @map("changed_by_user_id")
+  changedBy        User?           @relation("StatusHistoryChangedBy", fields: [changedByUserId], references: [id])
+  changedAt        DateTime        @default(now()) @map("changed_at")
+
+  @@index([serviceRequestId])
+  @@map("service_request_status_history")
+}
+
+/// database-design.md 1.7 — approved decision. Generic audit trail
+/// across every entity via targetType/targetId rather than a foreign
+/// key per entity, so future entities don't require a schema change
+/// here (see database-design.md 1.7 / Section 2 relationships note).
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorUserId  String?  @map("actor_user_id")
+  actor        User?    @relation("AuditLogActor", fields: [actorUserId], references: [id])
+  action       String
+  targetType   String   @map("target_type")
+  targetId     String   @map("target_id")
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([targetType, targetId])
+  @@index([actorUserId])
+  @@map("audit_logs")
+}
+
+/// Added while implementing apps/api — authentication-architecture.md
+/// Section 2 flagged this as a needed follow-up when JWT + refresh
+/// tokens was decided ("Refresh tokens... should be tracked
+/// server-side... not yet added to database-design.md — flagged as a
+/// follow-up schema addition"). This is that addition. Storing a hash
+/// of the token, never the raw value, so a database read alone can't
+/// be used to impersonate a session.
+model RefreshToken {
+  id         String    @id @default(cuid())
+  userId     String    @map("user_id")
+  user       User      @relation("RefreshTokenOwner", fields: [userId], references: [id])
+  tokenHash  String    @unique @map("token_hash")
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+/// database-design.md 1.8 — approved decision. Deliberately generic
+/// key/value store; no fixed list of settings decided yet (see
+/// database-design.md 1.8's "Not decided" note).
+model SettingEntry {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  value           Json
+  updatedByUserId String   @map("updated_by_user_id")
+  updatedBy       User     @relation("SettingUpdatedBy", fields: [updatedByUserId], references: [id])
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("setting_entries")
+}

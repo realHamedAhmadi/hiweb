@@ -1,0 +1,75 @@
+# CI pipeline — matches the "on every pull request" stage proposed in
+# infrastructure-architecture.md Section 3: lint/typecheck/dependency-
+# scan (no automated tests yet beyond the few added under
+# apps/api/src/**/*.test.ts — Section 16, Testing & QA, remains
+# otherwise undesigned).
+#
+# NEVER RUN — this environment has no network access to actually
+# execute a GitHub Actions workflow. Written to standard Actions
+# syntax, unverified.
+#
+# NOTE on tool choice: GitHub Actions was flagged in
+# infrastructure-architecture.md as "an inherited assumption from
+# earlier scaffolding, not a confirmed decision" — writing this file
+# is what turns that assumption into an actual implementation choice.
+# If a different CI tool is preferred, this file (and only this file)
+# needs to change.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: hiweb
+          POSTGRES_PASSWORD: hiweb
+          POSTGRES_DB: hiweb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://hiweb:hiweb@localhost:5432/hiweb
+      JWT_ACCESS_SECRET: ci-only-placeholder-secret-not-for-real-use
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies (all workspaces)
+        run: npm install
+
+      - name: Build packages/database (prisma generate + tsc)
+        run: npm run build --workspace=packages/database
+
+      - name: Typecheck apps/web
+        run: npm run typecheck --workspace=apps/web
+
+      - name: Typecheck apps/api
+        run: npm run typecheck --workspace=apps/api
+
+      - name: Run apps/api tests
+        run: npm test --workspace=apps/api
+
+      - name: Dependency vulnerability scan
+        run: npm audit --audit-level=high || true
+        # `|| true` so a known-vulnerable transitive dependency doesn't
+        # hard-fail every CI run before this has ever been triaged —
+        # remove once someone has actually reviewed `npm audit`'s
+        # output for this project.

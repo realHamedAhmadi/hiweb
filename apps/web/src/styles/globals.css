@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Vazirmatn: unified Latin + Arabic + Persian variable font.
+  Loaded here via @font-face/Google Fonts import as a placeholder path —
+  when network access is available, prefer `next/font/google` (or a
+  self-hosted variable font file) instead of a runtime @import for
+  production performance. Not yet wired to next/font in this
+  foundation pass.
+*/
+@import url("https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap");
+
+@layer base {
+  body {
+    @apply bg-paper-50 text-ink-900 font-body;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display;
+  }
+}

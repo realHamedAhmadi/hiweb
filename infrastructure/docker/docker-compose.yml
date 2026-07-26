@@ -1,0 +1,48 @@
+# Local development convenience only — NOT a production deployment
+# manifest. Runs a PostgreSQL instance + apps/api together so a
+# developer doesn't need PostgreSQL installed natively.
+#
+# apps/web is deliberately NOT included here — infrastructure-
+# architecture.md Section 2 decided apps/web deploys to a managed
+# platform (Vercel-style), not a container, so it isn't part of this
+# compose setup even for local dev; run it separately with
+# `npm run dev` inside apps/web.
+#
+# NEVER RUN — no Docker daemon available in this environment.
+
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hiweb
+      POSTGRES_PASSWORD: hiweb
+      POSTGRES_DB: hiweb
+    ports:
+      - "5432:5432"
+    volumes:
+      - hiweb_postgres_data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      APP_URL: http://localhost:3000
+      DATABASE_URL: postgresql://hiweb:hiweb@postgres:5432/hiweb
+      # JWT_ACCESS_SECRET, PI_API_KEY, etc. — supply your own via a
+      # local .env file referenced with `env_file:`, not hardcoded here.
+    env_file:
+      - ../../apps/api/.env
+
+volumes:
+  hiweb_postgres_data:
