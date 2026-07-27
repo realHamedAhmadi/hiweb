@@ -34,7 +34,7 @@ export async function loginWithPi(piAccessToken: string) {
       data: {
         piUid: identity.piUid,
         displayName: identity.displayName,
-        email: identity.email,
+        //email: identity.email,
         // role defaults to USER, accountStatus defaults to ACTIVE — see schema.prisma
       },
     });

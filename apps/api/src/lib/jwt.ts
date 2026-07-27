@@ -22,7 +22,7 @@ export function signAccessToken(payload: AccessTokenPayload): string {
     // token with a missing/empty secret.
     throw new Error("JWT_ACCESS_SECRET is not configured");
   }
-  return jwt.sign(payload, ACCESS_SECRET, { expiresIn: ACCESS_EXPIRES_IN });
+  return jwt.sign(payload, ACCESS_SECRET, { expiresIn: "7d" });
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload {
