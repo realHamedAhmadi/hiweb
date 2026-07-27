@@ -1,0 +1,6 @@
+DATABASE_URL=postgresql://neondb_owner:npg_RBeqyjvOth51@ep-proud-cloud-axhi4om0-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+JWT_ACCESS_SECRET=dokfopajfkdosvmdl;gvmjroifjpoe4i3094809234r3opfmdkflmfkjwepofkewo394ewqewqeqweqw9048fkmdsklfmkflir93i490dskdklwqdmwadmnwqfnfklmAELKFJMPEWORWEPOFNEMKdfwefefedfer34fdfdfdfdfdsfdfe4i394i
+PI_API_KEY=khe7bf0vqdf8tsfgkjfkiucdocybiq1zssrrafhji8yyifsmqfujy7ayn3hdew34
+PI_APP_ID=roohiahmadi
+APP_URL=https://hiweb-web.vercel.app/
+NODE_ENV=production
