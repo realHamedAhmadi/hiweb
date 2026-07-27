@@ -29,9 +29,9 @@ function ensurePiInitialized() {
  * gives back (accessToken + basic user info). This part is genuinely
  * real — it will actually prompt a real Pi Browser authentication flow
  * when run inside Pi Browser with the SDK script loaded. What happens
- * to the resulting accessToken next (verifying it server-side) is a
- * separate, currently-stubbed concern — see authService.ts and
- * apps/api's src/lib/piNetwork.ts.
+ * to the resulting accessToken next (verifying it server-side) is now
+ * ALSO real — see apps/api's src/lib/piNetwork.ts, which calls Pi's
+ * /v2/me endpoint for real (no longer a stub).
  */
 export async function authenticateWithPiSdk(): Promise<PiAuthResult> {
   ensurePiInitialized();
@@ -49,4 +49,24 @@ export async function authenticateWithPiSdk(): Promise<PiAuthResult> {
   return window.Pi.authenticate(["username", "payments"], (payment) => {
     console.warn("Incomplete Pi payment found (not yet handled):", payment);
   });
+}
+
+/**
+ * Creates a real Pi payment (User-to-App) via the SDK. This is
+ * intentionally minimal — built specifically to satisfy the Pi
+ * Developer Portal's "Process a Transaction on the App" checklist
+ * step, not a full Phase 2 payments system (no ServiceRequest/
+ * Quotation linkage, no dedicated Payment entity — see
+ * apps/api/src/controllers/payments.controller.ts for the same
+ * scope note).
+ */
+export function createPiPayment(
+  data: PiPaymentData,
+  callbacks: PiPaymentCallbacks
+): void {
+  ensurePiInitialized();
+  if (!window.Pi) {
+    throw new Error("Pi SDK is not loaded — window.Pi is undefined");
+  }
+  window.Pi.createPayment(data, callbacks);
 }

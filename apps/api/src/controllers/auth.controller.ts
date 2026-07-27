@@ -31,11 +31,12 @@ export async function piLoginController(req: Request, res: Response) {
     if (err instanceof Error && err.message === "ACCOUNT_NOT_ACTIVE") {
       return res.status(403).json({ error: { message: "Account is not active" } });
     }
-    // Includes the PiVerificationNotImplementedError case — surfaces as
-    // a 501 so it's obviously distinguishable from a real auth failure
-    // during development.
-    if (err instanceof Error && err.name === "PiVerificationNotImplementedError") {
-      return res.status(501).json({ error: { message: err.message } });
+    // PiVerificationError (src/lib/piNetwork.ts) — a real, failed call
+    // to Pi's /v2/me endpoint (invalid/expired token, or Pi's API
+    // unreachable). Surfaced as 401, since from the client's
+    // perspective this is an authentication failure either way.
+    if (err instanceof Error && err.name === "PiVerificationError") {
+      return res.status(401).json({ error: { message: err.message } });
     }
     return res.status(401).json({ error: { message: "Login failed" } });
   }

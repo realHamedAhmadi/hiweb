@@ -21,12 +21,26 @@ interface PiPaymentDTO {
   [key: string]: unknown;
 }
 
+interface PiPaymentData {
+  amount: number;
+  memo: string;
+  metadata: Record<string, unknown>;
+}
+
+interface PiPaymentCallbacks {
+  onReadyForServerApproval: (paymentId: string) => void;
+  onReadyForServerCompletion: (paymentId: string, txid: string) => void;
+  onCancel: (paymentId: string) => void;
+  onError: (error: Error, payment?: PiPaymentDTO) => void;
+}
+
 interface PiSDK {
   init(config: { version: string; sandbox?: boolean }): void;
   authenticate(
     scopes: string[],
     onIncompletePaymentFound: (payment: PiPaymentDTO) => void
   ): Promise<PiAuthResult>;
+  createPayment(data: PiPaymentData, callbacks: PiPaymentCallbacks): void;
 }
 
 interface Window {

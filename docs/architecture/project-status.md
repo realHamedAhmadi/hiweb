@@ -100,7 +100,7 @@ form's actual submission were deliberately left untouched at this
 stage — Contact requires an authenticated user, and Pi Login wiring
 (below) came after this.
 
-## 0d. Pi Login now wired client-side (frontend real, backend still stubbed)
+## 0d. Pi Login wired client-side (see Section 0g — backend is now real too)
 
 `apps/web` now has a real `AuthProvider` (`src/context/AuthContext.tsx`)
 wrapping the whole app, a real Pi SDK client wrapper
@@ -116,12 +116,12 @@ localStorage) access token storage per
 `authentication-architecture.md` Section 2, and a visible
 logged-in/logged-out/error state in the Header.
 
-**What will fail today, by design:** the moment the frontend sends the
-Pi-issued token to `apps/api`'s `/auth/pi-login`, it hits
-`verifyPiAccessToken`'s intentional stub and returns a 501 — surfaced
-in the Header as a visible error message rather than a silent failure.
-This is the same documented gap as before, now reachable from a real
-button instead of a dead one.
+**At the time this section was originally written**, the backend half
+of this flow (`verifyPiAccessToken`) was still an intentional stub —
+that's since been replaced with a real implementation calling Pi's
+`/v2/me` endpoint. See Section 0g below for that change. This section
+is kept for the frontend-specific details above; don't rely on the
+"will fail" framing this section used to have.
 
 **Caught and fixed while building this:** `AuthControl` was initially
 written as a component function defined inside `Header`'s own function
@@ -147,10 +147,11 @@ client-side UX guard only, not the real security boundary — actual
 enforcement is `apps/api`'s `requireRole("ADMIN")` middleware, which
 already exists independently of this UI.
 
-**Currently unreachable in practice**, same root cause as before: Pi
-Login's backend verification is still stubbed, so nobody can actually
-reach `"authenticated"` status yet. Built now anyway so it's ready the
-moment that's resolved.
+**Reachability note (updated by Section 0g below):** this was
+originally unreachable because Pi Login's backend verification was
+stubbed. That's since been implemented for real (Section 0g) — the
+admin dashboard should now be reachable by a real admin account, once
+this code actually runs somewhere with real credentials configured.
 
 **A real, systemic bug caught and fixed while building this:**
 `React.FormEvent` / `React.ReactNode` were used as types in **6
@@ -208,18 +209,69 @@ constant; an inaccurate code comment referencing a file
 
 ---
 
+## 0g. Pi Network verification is now REAL (no longer a stub) + minimal test payment
+
+Once the person had real Pi Developer Portal credentials (App ID +
+Server API Key), the following was implemented for real, based on
+Pi's official Platform API docs (verified via web search against
+pi-apps/pi-platform-docs and pi-apps/pi-sdk-integration-guide):
+
+- **`apps/api/src/lib/piNetwork.ts`** — `verifyPiAccessToken` now
+  calls Pi's real `GET /v2/me` endpoint with the user's access token,
+  replacing the previous always-throwing stub entirely.
+- **`apps/api/src/lib/piPlatformClient.ts`** (new) — server-
+  authenticated calls (`Authorization: Key <PI_API_KEY>`) for payment
+  approve/complete.
+- **`POST /payments/approve` and `POST /payments/complete`** (new
+  endpoints, any authenticated user) — implement Pi's Server-Side
+  Approval and Server-Side Completion steps.
+- **`apps/web/src/app/pi-payment-test`** (new page) — a minimal
+  (0.01 Pi) test payment flow using the real `Pi.createPayment()` SDK
+  method, built specifically to satisfy the Pi Developer Portal
+  onboarding checklist's "Process a Transaction on the App" step
+  (which the approved MVP scope had deferred to Phase 2 — this is a
+  minimal exception to unblock that one checklist requirement, not a
+  full payments system: no `Payment` entity, no ServiceRequest/
+  Quotation linkage).
+
+**Honest caveats:**
+- **Never actually run or tested** — same network limitation as
+  everything else in this backend.
+- **One unresolved documentation conflict, flagged rather than
+  silently picked**: official Pi sources disagree on whether the
+  server API key header is `Authorization: Key <key>` or
+  `Authorization: key <key>` (casing). This implementation uses
+  capitalized `Key`; if payment approve/complete calls ever 401
+  unexpectedly, try lowercase first.
+
+**Bugs caught and fixed while removing the old stub, not left in:**
+- `auth.controller.ts` checked for an error class name
+  (`PiVerificationNotImplementedError`) that no longer exists after
+  the stub was replaced — that branch was dead code silently falling
+  through to a generic error. Fixed to check for the real error class
+  (`PiVerificationError`).
+- A stale comment in `AuthContext.tsx` still described backend
+  verification as "currently WILL fail" — updated.
+- `apps/api/.env.example` ended up with **two duplicate "Pi Network"
+  header blocks** (old stub-era comment left in place above the new
+  one) after an incomplete edit — removed the stale duplicate.
+
 ## 1. Completed frontend pages (`apps/web`)
 
 | Route | Status | Notes |
 |---|---|---|
 | `/` (Home) | ✅ Built | Hero, Services preview, Portfolio preview, Trust/Security, CTA — real copy pulled from the approved spec where decided content exists |
-| `/services` | ✅ Built | Overview + 3 service category cards (from Section 1, Item 5); individual per-service detail pages not started |
-| `/portfolio` | ✅ Built | 6 placeholder project cards; no real case studies exist yet — waiting on Admin Portfolio Management |
-| `/contact` | ✅ Built | Form UI (name, email, service interest, project details) — **not wired to any backend**; `onSubmit` only calls `preventDefault()` |
-| `/about` | 🟡 Route stub only | No content built yet |
+| `/services` | ✅ Built | Overview + service category cards, fetched from real API with placeholder fallback; links to `/services/[slug]` |
+| `/services/[slug]` | ✅ Built | Individual service detail, fetched by slug; `notFound()` on miss |
+| `/portfolio` | ✅ Built | Project cards, fetched from real API with placeholder fallback; links to `/portfolio/[slug]` |
+| `/portfolio/[slug]` | ✅ Built | Individual project detail, fetched by slug |
+| `/about` | ✅ Built | Real content from the approved spec |
+| `/contact` | ✅ Built | Wired to real `POST /service-requests`, gated behind login |
+| `/pi-payment-test` | ✅ Built | Minimal real Pi Payment flow — see Section 0g |
+| `/admin/*` | ✅ Built | Full admin dashboard — see Section 0e |
 
 **Shared layout components:**
-- `Header` — ✅ Full nav, active-route highlighting, mobile menu (with Escape-to-close), language switcher placeholder, Pi Login button placeholder (no auth wired)
+- `Header` — ✅ Full nav, active-route highlighting, mobile menu, real Pi Login (+ dev-only bypass buttons when explicitly enabled)
 - `Footer` — ✅ Brand area, nav links (shared with Header via `navLinks.ts`), legal placeholders (Terms/Privacy — no routes exist), social icon placeholders (disabled, not linked anywhere)
 
 ## 2. Current architecture status

@@ -1,53 +1,79 @@
 /**
- * Pi Network Platform API verification — STUB, NOT IMPLEMENTED.
+ * Pi Network Platform API client — REAL implementation.
  *
- * This is the single most important gap in the entire backend: the
- * function below is what authentication-architecture.md Section 1,
- * Step 5 calls "backend calls Pi's Platform API to verify the token
- * is genuine and current" — and it does not actually do that yet.
+ * Based on Pi Network's official Platform API docs
+ * (pi-apps/pi-platform-docs, pi-apps/pi-sdk-integration-guide):
+ * - Verifying a user's access token: GET /v2/me with
+ *   `Authorization: Bearer <user's access token>` — returns
+ *   { uid, username } or 401 if invalid.
+ * - Server-authenticated calls (payment approve/complete) use
+ *   `Authorization: Key <PI_API_KEY>` instead.
  *
- * Why it's stubbed rather than implemented:
- * - Doing this for real requires a genuine Pi Developer account, a
- *   registered Pi app, and real credentials (PI_API_KEY / PI_APP_ID)
- *   — none of which exist in this development environment, and none
- *   of which I have access to.
- * - This environment has no network access, so even with credentials,
- *   no outbound call to Pi's Platform API could be tested here.
- * - Sandbox vs. mainnet (Section 18) is also still undecided in the
- *   architecture docs — a real implementation needs that decision
- *   first, since the endpoint called likely differs between them.
+ * ⚠️ CASING NOTE, flagged honestly: different official Pi sources
+ * show this server-auth header as both `Key ${API_KEY}` and
+ * `key ${API_KEY}` (lowercase). This implementation uses `Key`
+ * (capitalized), matching the more recent, dedicated
+ * pi-sdk-integration-guide source. If server-authenticated calls
+ * (see piPlatformClient.ts) ever fail with a 401 that user-token calls
+ * don't, try the lowercase variant first — this is the one detail in
+ * this integration that could not be independently re-verified beyond
+ * conflicting documentation.
  *
- * DO NOT deploy this to production as-is. `verifyPiAccessToken` below
- * currently throws, specifically so that calling it fails loudly
- * instead of silently trusting an unverified token (fail closed, per
- * security-architecture.md Section 1) — but the safe failure mode is
- * "auth doesn't work at all," not "auth is properly implemented."
- *
- * To make this real, replace the body of `verifyPiAccessToken` with an
- * actual HTTP call to Pi's Platform API (per Pi Network's own
- * developer documentation — not something I have direct access to
- * verify against), using PI_API_KEY / PI_APP_ID / PI_PLATFORM_API_URL
- * from the environment (already listed in .env.example).
+ * STILL UNVERIFIED: this has never actually been run against Pi's
+ * real API — this environment has no network access. Written to match
+ * documented behavior exactly, but treat the first real Testnet call
+ * as the actual validation step.
  */
+
+const PI_PLATFORM_API_URL =
+  process.env.PI_PLATFORM_API_URL || "https://api.minepi.com";
 
 export interface PiVerifiedIdentity {
   piUid: string;
   displayName: string;
-  email?: string;
 }
 
-export class PiVerificationNotImplementedError extends Error {
-  constructor() {
-    super(
-      "Pi Network token verification is not implemented. See src/lib/piNetwork.ts."
-    );
-    this.name = "PiVerificationNotImplementedError";
+export class PiVerificationError extends Error {
+  status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = "PiVerificationError";
+    this.status = status;
   }
 }
 
+/**
+ * Verifies a user's Pi access token by calling Pi's /v2/me endpoint
+ * server-side (authentication-architecture.md Section 1, Step 5 —
+ * "never trust the frontend's claim alone"). Returns the verified
+ * uid/username, or throws if the token is invalid/expired (Pi returns
+ * a 401 in that case).
+ */
 export async function verifyPiAccessToken(
-  _piAccessToken: string
+  piAccessToken: string
 ): Promise<PiVerifiedIdentity> {
-  // Intentionally always throws — see file header comment above.
-  throw new PiVerificationNotImplementedError();
+  const response = await fetch(`${PI_PLATFORM_API_URL}/v2/me`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${piAccessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    // Fail closed (security-architecture.md Section 1) — any
+    // non-2xx response (401 for an invalid/expired token, or
+    // anything else) is treated as verification failure, never
+    // partially trusted.
+    throw new PiVerificationError(
+      `Pi token verification failed (${response.status})`,
+      response.status
+    );
+  }
+
+  const data = (await response.json()) as { uid: string; username: string };
+
+  return {
+    piUid: data.uid,
+    displayName: data.username,
+  };
 }

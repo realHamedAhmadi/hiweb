@@ -68,11 +68,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // in a Pi Browser context with the SDK script loaded.
       const piAuthResult = await authenticateWithPiSdk();
 
-      // Backend verification — currently WILL fail, because
-      // apps/api's verifyPiAccessToken is an intentional stub (see
-      // apps/api/src/lib/piNetwork.ts). Surfaced here as a normal
-      // error rather than crashing, so the UI can show something
-      // sensible instead of an unhandled exception.
+      // Backend verification — now REAL (apps/api's verifyPiAccessToken
+      // calls Pi's /v2/me endpoint for real, see
+      // apps/api/src/lib/piNetwork.ts). Still wrapped in try/catch since
+      // a real network/API error is always possible, same as any
+      // external call.
       const result = await piLoginRequest(piAuthResult.accessToken);
       setUser(result.user);
       setAccessToken(result.accessToken);

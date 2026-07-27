@@ -13,10 +13,14 @@ installed and nothing has been executed against a real database or
 Node process. See `/docs/architecture/project-status.md` for the
 authoritative, detailed breakdown of what's real vs. stubbed.
 
-**The one deliberate gap:** real Pi Network token verification
-(`apps/api/src/lib/piNetwork.ts`) requires a genuine Pi Developer
-account and network access, neither available here — everything
-around it is built and ready.
+**Pi Network integration is now REAL, not stubbed:** with real Pi
+Developer Portal credentials (App ID + Server API Key), token
+verification (`apps/api/src/lib/piNetwork.ts`) calls Pi's actual
+`/v2/me` endpoint, and a minimal test payment flow
+(`apps/web/src/app/pi-payment-test`) exercises the full approve/
+complete payment cycle. **None of this has actually been run or
+tested** — same network limitation as everything else. Set
+`PI_API_KEY` and `PI_APP_ID` in `apps/api/.env` to use it for real.
 
 ## Getting started (on a machine with internet access)
 ```bash

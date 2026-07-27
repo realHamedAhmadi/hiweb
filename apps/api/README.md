@@ -48,12 +48,23 @@ npm run dev
   `QUOTATION_SENT`), list.
 - **Service Categories & Portfolio Projects** — public read (published
   only, or everything if the requester is an authenticated admin),
-  admin-only create/update. No delete endpoint exists on purpose —
-  content is archived (`publishStatus: ARCHIVED`), never hard-deleted.
+  admin-only create/update, plus `GET /:slug` lookups for individual
+  detail pages. No delete endpoint exists on purpose — content is
+  archived (`publishStatus: ARCHIVED`), never hard-deleted.
 - **Settings** — admin-only list/update, backing `SettingEntry`.
 - **Audit Logs** — admin-only, read-only (no write/delete route
   exists — entries are only ever created as a side effect of other
   actions).
+- **Payments** (`/payments/approve`, `/payments/complete`) — minimal
+  Pi Payment approve/complete flow using real Pi Platform API calls
+  (`lib/piPlatformClient.ts`), built specifically to satisfy the Pi
+  Developer Portal's "Process a Transaction on the App" onboarding
+  checklist step. Not a full payments system — see "Pi Network
+  integration" section below.
+- **⚠️ Dev-only login bypass** (`POST /auth/dev-login`) — double-
+  guarded (`NODE_ENV` + `ENABLE_DEV_LOGIN`), returns 404 when disabled.
+  See `src/lib/devAuth.ts` for the full warning before ever enabling
+  this.
 - **Security controls actually wired in**: CORS restricted to
   `APP_URL`, general rate limiting on all routes + a stricter limit on
   `/auth/pi-login`, input validation via `zod` on every endpoint that
@@ -62,16 +73,24 @@ npm run dev
   than 403ing — deliberately not confirming the record exists),
   standardized error responses that hide internals outside development.
 
-## The one deliberate stub: Pi Network verification
-`src/lib/piNetwork.ts`'s `verifyPiAccessToken` always throws. This is
-not an oversight — it's the single piece of this backend that cannot
-be honestly implemented without a real Pi Developer account, real
-credentials, and network access to Pi's Platform API, none of which
-exist in this environment. Every other piece of the auth flow (user
-lookup/creation, JWT issuance, refresh rotation) is real and ready —
-only this one verification call needs to be replaced with an actual
-HTTP call before login can ever succeed. See the file's own header
-comment for what that replacement needs to do.
+## Pi Network integration: real, but unverified
+`src/lib/piNetwork.ts`'s `verifyPiAccessToken` now makes a real call to
+Pi's `GET /v2/me` endpoint — no longer a stub. `src/lib/piPlatformClient.ts`
+handles the server-authenticated (`Authorization: Key <PI_API_KEY>`)
+calls needed for payment approve/complete
+(`src/controllers/payments.controller.ts`). Requires `PI_API_KEY` set
+in `.env` — get it from your app's "API Key" section in the Pi
+Developer Portal.
+
+**Still never actually run** — same network limitation as everything
+else here. One documented uncertainty: official Pi sources disagree on
+the server API key header casing (`Key` vs. `key`) — this uses `Key`
+(capitalized); if payment calls ever 401 unexpectedly, try lowercase.
+
+A minimal test payment flow exists at `apps/web/src/app/pi-payment-test`
+— built specifically to satisfy the Pi Developer Portal's "Process a
+Transaction on the App" onboarding checklist step (not a full Phase 2
+payments system).
 
 ## Known architecture deviations from backend-architecture.md
 - No separate `repositories/` layer — Prisma calls happen directly
@@ -87,7 +106,8 @@ comment for what that replacement needs to do.
   instead of its current hardcoded placeholders.
 
 ## Not implemented / explicitly out of scope for this pass
-- Pi Network verification (see above — the one real blocker)
+- A dedicated `Payment` entity / full Phase 2 Pi Payments system (only
+  the minimal test-payment flow exists — see above)
 - Structured logging / log aggregation (Section 14) — currently just
   console.log/console.error
 - Pagination beyond a simple limit/offset on the audit log list
