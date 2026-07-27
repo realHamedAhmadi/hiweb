@@ -11,9 +11,9 @@ const config: Config = {
     extend: {
       colors,
       fontFamily: {
-        display: typography.fontFamily.display,
-        body: typography.fontFamily.body,
-        mono: typography.fontFamily.mono,
+          display: ["Vazirmatn", "ui-sans-serif", "system-ui", "sans-serif"],
+          body: ["Vazirmatn", "ui-sans-serif", "system-ui", "sans-serif"],
+          mono: ["JetBrains Mono", "ui-monospace", "monospace"],
       },
       fontSize: typography.scale,
       borderRadius: radius,
